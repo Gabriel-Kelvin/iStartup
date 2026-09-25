@@ -9,6 +9,7 @@ import {
   EyeOff,
   LockKeyhole,
   LogOut,
+  Menu,
   Plus,
   Rocket,
   Settings2,
@@ -139,6 +140,7 @@ function Modal({
 
 export default function App() {
   const [view, setView] = useState<View>("guest");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -176,6 +178,15 @@ export default function App() {
   const [scoreError, setScoreError] = useState("");
   const [deletingScore, setDeletingScore] = useState<Score | null>(null);
   const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [menuOpen]);
 
   const notify = (message: string) => {
     setToast(message);
@@ -531,14 +542,30 @@ export default function App() {
     <header className="topbar shell">
       <Brand
         onClick={() => {
+          setMenuOpen(false);
           setGuestProjectId(null);
           setView("guest");
         }}
       />
-      <nav className="nav-actions" aria-label="Main navigation">
+      <button
+        className="menu-toggle"
+        type="button"
+        aria-label={menuOpen ? "Close menu" : "Open menu"}
+        aria-expanded={menuOpen}
+        aria-controls="main-navigation"
+        onClick={() => setMenuOpen((open) => !open)}
+      >
+        {menuOpen ? <X size={24} /> : <Menu size={24} />}
+      </button>
+      <nav
+        id="main-navigation"
+        className={"nav-actions" + (menuOpen ? " menu-open" : "")}
+        aria-label="Main navigation"
+      >
         <button
           className={"nav-link " + (view === "guest" ? "active" : "")}
           onClick={() => {
+            setMenuOpen(false);
             setGuestProjectId(null);
             setView("guest");
           }}
@@ -549,22 +576,32 @@ export default function App() {
           <>
             <button
               className={"nav-link " + (view === profile.role ? "active" : "")}
-              onClick={() => setView(profile.role)}
+              onClick={() => {
+                setMenuOpen(false);
+                setView(profile.role);
+              }}
             >
               {profile.role === "admin" ? "Control room" : "Judge desk"}
             </button>
             <span className="user-pill">{profile.display_name}</span>
             <button
               className="icon-button"
-              onClick={logout}
+              onClick={() => {
+                setMenuOpen(false);
+                void logout();
+              }}
               title="Sign out"
               aria-label="Sign out"
             >
               <LogOut size={17} />
+              <span className="signout-label">Sign out</span>
             </button>
           </>
         ) : (
-          <button className="top-cta" onClick={() => openAuth("judge")}>
+          <button className="top-cta" onClick={() => {
+            setMenuOpen(false);
+            openAuth("judge");
+          }}>
             Sign in
           </button>
         )}
