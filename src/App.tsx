@@ -60,13 +60,13 @@ function Brand({ onClick }: { onClick: () => void }) {
     >
       <img
         className="brand-logo"
-        src="/istartup-logo.png"
+        src="/istartup-logo-season-1.png"
         alt="iStartup Junior logo"
       />
       <span className="brand-copy">
         <span className="eyebrow">MS Dhoni Global School presents</span>
         <span className="brand-name">
-          iStartup Junior <b>— Season 2</b>
+          iStartup Junior <b>— Season 1</b>
         </span>
       </span>
     </button>
@@ -166,7 +166,7 @@ export default function App() {
   const [adminProjectId, setAdminProjectId] = useState<string | null>(null);
   const [privateError, setPrivateError] = useState("");
   const [dialog, setDialog] = useState<
-    "project" | "delete" | "score" | "delete-score" | null
+    "project" | "delete" | "score" | "delete-score" | "delete-judge" | null
   >(null);
   const [editing, setEditing] = useState<Project | null>(null);
   const [draft, setDraft] = useState<ProjectDraft>(blankDraft);
@@ -177,6 +177,8 @@ export default function App() {
   const [scoreInput, setScoreInput] = useState("");
   const [scoreError, setScoreError] = useState("");
   const [deletingScore, setDeletingScore] = useState<Score | null>(null);
+  const [deletingJudge, setDeletingJudge] = useState<Profile | null>(null);
+  const [judgeDeleteError, setJudgeDeleteError] = useState("");
   const [toast, setToast] = useState("");
 
   useEffect(() => {
@@ -466,6 +468,34 @@ export default function App() {
     await loadGuest();
     notify("Project deleted.");
   };
+  const deleteJudge = async () => {
+    if (!deletingJudge || profile?.role !== "admin") return;
+    setJudgeDeleteError("");
+    setDialogBusy(true);
+    const result = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
+      "delete-judge",
+      { body: { judge_id: deletingJudge.id } },
+    );
+    setDialogBusy(false);
+    if (result.error || !result.data?.ok) {
+      let message = result.data?.error;
+      if (!message && result.error && "context" in result.error) {
+        const context = result.error.context;
+        if (context instanceof Response) {
+          const details = await context.json().catch(() => null);
+          if (details && typeof details.error === "string") message = details.error;
+        }
+      }
+      setJudgeDeleteError(
+        message ?? "Unable to delete this judge. Please try again.",
+      );
+      return;
+    }
+    setDialog(null);
+    setDeletingJudge(null);
+    await Promise.all([loadPrivate("admin"), loadGuest()]);
+    notify("Judge account and scores deleted.");
+  };
   const toggleJudge = async (
     projectId: string,
     judgeId: string,
@@ -649,7 +679,7 @@ export default function App() {
                           <em>Bold scores.</em>
                         </h1>
                         <p className="lede">
-                          Explore the Season 2 projects. Judge scores and totals
+                          Explore the Season 1 projects. Judge scores and totals
                           appear here only when the event admin reveals them.
                         </p>
                       </section>
@@ -963,14 +993,14 @@ export default function App() {
                               <Settings2 size={16} />
                             </button>
                             <button
-                              className="icon-button danger-icon"
+                              className="danger judge-delete-button"
                               title={"Delete " + project.name}
                               onClick={() => {
                                 setEditing(project);
                                 setDialog("delete");
                               }}
                             >
-                              <Trash2 size={16} />
+                              <Trash2 size={16} /> Delete
                             </button>
                           </div>
                         </div>
@@ -1019,19 +1049,33 @@ export default function App() {
                               score entries
                             </div>
                           </div>
-                          <Badge
-                            kind={
-                              scores.some(
-                                (score) => score.judge_id === judge.id,
-                              )
-                                ? "done"
-                                : "locked"
-                            }
-                          >
-                            {scores.some((score) => score.judge_id === judge.id)
-                              ? "Scoring"
-                              : "Not started"}
-                          </Badge>
+                          <div className="judge-row-actions">
+                            <Badge
+                              kind={
+                                scores.some(
+                                  (score) => score.judge_id === judge.id,
+                                )
+                                  ? "done"
+                                  : "locked"
+                              }
+                            >
+                              {scores.some((score) => score.judge_id === judge.id)
+                                ? "Scoring"
+                                : "Not started"}
+                            </Badge>
+                            <button
+                              className="icon-button danger-icon"
+                              aria-label={`Delete ${judge.display_name}'s account`}
+                              title={`Delete ${judge.display_name}'s account`}
+                              onClick={() => {
+                                setDeletingJudge(judge);
+                                setJudgeDeleteError("");
+                                setDialog("delete-judge");
+                              }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                       ))
                     ) : (
@@ -1162,7 +1206,7 @@ export default function App() {
                       delete your scores at any time.
                     </p>
                   </div>
-                  <Badge kind="live">Season 2 judging</Badge>
+                  <Badge kind="live">Season 1 judging</Badge>
                 </div>
                 {privateError && (
                   <div className="error-banner">{privateError}</div>
@@ -1334,6 +1378,23 @@ export default function App() {
               onClick={deleteProject}
             >
               {dialogBusy ? "Deleting…" : "Delete project"}
+            </button>
+          </div>
+        </Modal>
+      )}
+      {dialog === "delete-judge" && deletingJudge && (
+        <Modal
+          title="Delete this judge?"
+          subtitle={`“${deletingJudge.display_name}” will lose access. Their account, scores, and reveal settings will be permanently deleted.`}
+          onClose={() => !dialogBusy && setDialog(null)}
+        >
+          {judgeDeleteError && <div className="form-error">{judgeDeleteError}</div>}
+          <div className="dialog-actions">
+            <button className="secondary" disabled={dialogBusy} onClick={() => setDialog(null)}>
+              Cancel
+            </button>
+            <button className="danger" disabled={dialogBusy} onClick={deleteJudge}>
+              {dialogBusy ? "Deleting…" : "Delete judge account"}
             </button>
           </div>
         </Modal>

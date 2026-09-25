@@ -859,13 +859,22 @@ h3 {
   width: 43px;
   height: 43px;
 }
-.judge-row .status {
+.judge-row-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.judge-delete-button {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 12px;
 }
 .judge-meta {
   color: #9dacc0;
   font-size: 11px;
-  margin-top: 3;
+  margin-top: 3px;
 }
 .operator {
   display: grid;
@@ -1244,6 +1253,13 @@ h3 {
     flex-basis: calc(100% - 50px);
   }
   .admin-project-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .judge-row {
+    flex-wrap: wrap;
+  }
+  .judge-row-actions {
     width: 100%;
     justify-content: flex-end;
   }

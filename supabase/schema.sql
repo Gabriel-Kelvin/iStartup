@@ -1,4 +1,4 @@
--- iStartup Junior Season 2. Run once in the dedicated Supabase project's SQL editor.
+-- iStartup Junior Season 1. Run once in the dedicated Supabase project's SQL editor.
 create extension if not exists pgcrypto;
 create schema if not exists private;
 
