@@ -10,11 +10,13 @@ import {
   LockKeyhole,
   LogOut,
   Menu,
+  Moon,
   Plus,
   Rocket,
   Settings2,
   ShieldCheck,
   Sparkles,
+  Sun,
   Trash2,
   Users,
   X,
@@ -31,6 +33,15 @@ import type {
 import "./App.css";
 
 type View = "guest" | "login" | "admin" | "judge";
+type Theme = "dark" | "light";
+const themeStorageKey = "istartup-junior-theme";
+const initialTheme = (): Theme => {
+  try {
+    return localStorage.getItem(themeStorageKey) === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+};
 type AdminTab = "projects" | "judges" | "reveal";
 type ProjectDraft = { name: string; description: string; members: string };
 const blankDraft: ProjectDraft = { name: "", description: "", members: "" };
@@ -139,6 +150,7 @@ function Modal({
 }
 
 export default function App() {
+  const [theme, setTheme] = useState<Theme>(initialTheme);
   const [view, setView] = useState<View>("guest");
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -180,6 +192,15 @@ export default function App() {
   const [deletingJudge, setDeletingJudge] = useState<Profile | null>(null);
   const [judgeDeleteError, setJudgeDeleteError] = useState("");
   const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem(themeStorageKey, theme);
+    } catch {
+      // The selected theme still works when browser storage is unavailable.
+    }
+  }, [theme]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -635,12 +656,25 @@ export default function App() {
             Sign in
           </button>
         )}
+        <button
+          className="theme-switch"
+          type="button"
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={theme === "dark" ? "Light mode" : "Dark mode"}
+          onClick={() => {
+            setTheme((current) => current === "dark" ? "light" : "dark");
+            setMenuOpen(false);
+          }}
+        >
+          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          <span className="theme-label">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+        </button>
       </nav>
     </header>
   );
 
   return (
-    <div className="app">
+    <div className="app" data-theme={theme}>
       {header}
       <main className="shell main">
         {!configured && (
@@ -696,7 +730,7 @@ export default function App() {
                           </div>
                         </div>
                         <div className="aside-footer">
-                          <span>Season 02</span>
+                          <span>Season 01</span>
                           <span>
                             {publishedCount
                               ? `${publishedCount} scores revealed`

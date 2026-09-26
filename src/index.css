@@ -3,9 +3,15 @@
   font-family: "DM Sans", sans-serif;
   color: #f7f8fb;
   background: #101c2c;
+  color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+:root[data-theme="light"] {
+  color: #223247;
+  background: #f7f9fc;
+  color-scheme: light;
 }
 * {
   box-sizing: border-box;
