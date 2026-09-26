@@ -34,6 +34,60 @@ import "./App.css";
 
 type View = "guest" | "login" | "admin" | "judge";
 type Theme = "dark" | "light";
+type AdminTab = "projects" | "judges" | "reveal";
+type AppRoute =
+  | { kind: "guest-list" }
+  | { kind: "guest-project"; projectId: string }
+  | { kind: "login"; role: "judge" | "admin"; signup: boolean }
+  | { kind: "admin"; tab: AdminTab; projectId: string | null }
+  | { kind: "judge" };
+
+const readRoute = (): AppRoute => {
+  const [screen, part, id] = window.location.hash.slice(1).split("/");
+  if (screen === "project" && part) {
+    try {
+      return { kind: "guest-project", projectId: decodeURIComponent(part) };
+    } catch {
+      return { kind: "guest-list" };
+    }
+  }
+  if (screen === "sign-in")
+    return {
+      kind: "login",
+      role: part === "admin" ? "admin" : "judge",
+      signup: false,
+    };
+  if (screen === "sign-up")
+    return { kind: "login", role: "judge", signup: true };
+  if (screen === "admin") {
+    const tab: AdminTab =
+      part === "judges" || part === "reveal" ? part : "projects";
+    let projectId: string | null = null;
+    if (tab === "reveal" && id) {
+      try {
+        projectId = decodeURIComponent(id);
+      } catch {
+        projectId = null;
+      }
+    }
+    return { kind: "admin", tab, projectId };
+  }
+  if (screen === "judge") return { kind: "judge" };
+  return { kind: "guest-list" };
+};
+
+const routeHash = (route: AppRoute): string => {
+  if (route.kind === "guest-project")
+    return `#project/${encodeURIComponent(route.projectId)}`;
+  if (route.kind === "login")
+    return route.signup ? "#sign-up/judge" : `#sign-in/${route.role}`;
+  if (route.kind === "admin")
+    return `#admin/${route.tab}${route.tab === "reveal" && route.projectId
+      ? `/${encodeURIComponent(route.projectId)}`
+      : ""}`;
+  return route.kind === "judge" ? "#judge" : "#public";
+};
+
 const themeStorageKey = "istartup-junior-theme";
 const initialTheme = (): Theme => {
   try {
@@ -42,7 +96,6 @@ const initialTheme = (): Theme => {
     return "dark";
   }
 };
-type AdminTab = "projects" | "judges" | "reveal";
 type ProjectDraft = { name: string; description: string; members: string };
 const blankDraft: ProjectDraft = { name: "", description: "", members: "" };
 const initials = (name: string) =>
@@ -151,13 +204,21 @@ function Modal({
 
 export default function App() {
   const [theme, setTheme] = useState<Theme>(initialTheme);
-  const [view, setView] = useState<View>("guest");
+  const [route, setRoute] = useState<AppRoute>(readRoute);
+  const view: View =
+    route.kind === "guest-list" || route.kind === "guest-project"
+      ? "guest"
+      : route.kind;
+  const authRole = route.kind === "login" ? route.role : "judge";
+  const signup = route.kind === "login" && route.signup;
+  const guestProjectId =
+    route.kind === "guest-project" ? route.projectId : null;
+  const adminTab = route.kind === "admin" ? route.tab : "projects";
+  const adminProjectId = route.kind === "admin" ? route.projectId : null;
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
-  const [authRole, setAuthRole] = useState<"judge" | "admin">("judge");
-  const [signup, setSignup] = useState(false);
   const [authName, setAuthName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -170,12 +231,9 @@ export default function App() {
   const [publishedTotals, setPublishedTotals] = useState<PublishedTotal[]>([]);
   const [guestError, setGuestError] = useState("");
   const [guestLoading, setGuestLoading] = useState(true);
-  const [guestProjectId, setGuestProjectId] = useState<string | null>(null);
-  const [adminTab, setAdminTab] = useState<AdminTab>("projects");
   const [judges, setJudges] = useState<Profile[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
   const [scoreReveals, setScoreReveals] = useState<ScoreReveal[]>([]);
-  const [adminProjectId, setAdminProjectId] = useState<string | null>(null);
   const [privateError, setPrivateError] = useState("");
   const [dialog, setDialog] = useState<
     "project" | "delete" | "score" | "delete-score" | "delete-judge" | null
@@ -192,6 +250,43 @@ export default function App() {
   const [deletingJudge, setDeletingJudge] = useState<Profile | null>(null);
   const [judgeDeleteError, setJudgeDeleteError] = useState("");
   const [toast, setToast] = useState("");
+
+  const navigate = useCallback((next: AppRoute, replace = false) => {
+    const hash = routeHash(next);
+    if (window.location.hash !== hash) {
+      window.history[replace ? "replaceState" : "pushState"](
+        { istartupRoute: true },
+        "",
+        hash,
+      );
+    }
+    setRoute(next);
+    setMenuOpen(false);
+    setDialog(null);
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
+    const syncFromHistory = () => {
+      const next = readRoute();
+      if (next.kind === "admin" && profile?.role !== "admin") {
+        navigate({ kind: "login", role: "admin", signup: false }, true);
+      } else if (next.kind === "judge" && profile?.role !== "judge") {
+        navigate({ kind: "login", role: "judge", signup: false }, true);
+      } else {
+        setRoute(next);
+        setMenuOpen(false);
+        setDialog(null);
+        window.scrollTo(0, 0);
+      }
+    };
+    window.addEventListener("popstate", syncFromHistory);
+    window.addEventListener("hashchange", syncFromHistory);
+    return () => {
+      window.removeEventListener("popstate", syncFromHistory);
+      window.removeEventListener("hashchange", syncFromHistory);
+    };
+  }, [navigate, profile]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -291,6 +386,16 @@ export default function App() {
       setUser(current);
       if (!current) {
         setProfile(null);
+        const currentRoute = readRoute();
+        if (currentRoute.kind === "admin" || currentRoute.kind === "judge")
+          navigate(
+            {
+              kind: "login",
+              role: currentRoute.kind === "admin" ? "admin" : "judge",
+              signup: false,
+            },
+            true,
+          );
         setSessionLoading(false);
         return;
       }
@@ -302,12 +407,23 @@ export default function App() {
       if (result.data) {
         const next = result.data as Profile;
         setProfile(next);
-        setView(next.role);
+        const currentRoute = readRoute();
+        if (currentRoute.kind === "login" ||
+          !window.location.hash ||
+          (currentRoute.kind === "admin" && next.role !== "admin") ||
+          (currentRoute.kind === "judge" && next.role !== "judge")) {
+          navigate(
+            next.role === "admin"
+              ? { kind: "admin", tab: "projects", projectId: null }
+              : { kind: "judge" },
+            true,
+          );
+        }
         await loadPrivate(next.role);
       }
       setSessionLoading(false);
     },
-    [loadPrivate],
+    [loadPrivate, navigate],
   );
 
   useEffect(() => {
@@ -321,12 +437,12 @@ export default function App() {
       if (event === "SIGNED_OUT") {
         setUser(null);
         setProfile(null);
-        setView("guest");
+        navigate({ kind: "guest-list" });
       } else if (event === "SIGNED_IN" && session?.user)
         window.setTimeout(() => resolveUser(session.user), 0);
     });
     return () => subscription.unsubscribe();
-  }, [resolveUser]);
+  }, [resolveUser, navigate]);
   useEffect(() => {
     loadGuest();
     const timer = window.setInterval(loadGuest, 4000);
@@ -349,11 +465,9 @@ export default function App() {
   );
 
   const openAuth = (role: "judge" | "admin", create = false) => {
-    setAuthRole(role);
-    setSignup(role === "judge" && create);
     setAuthError("");
     setAuthNotice("");
-    setView("login");
+    navigate({ kind: "login", role, signup: role === "judge" && create });
   };
   const submitAuth = async (event: FormEvent) => {
     event.preventDefault();
@@ -419,7 +533,7 @@ export default function App() {
   };
   const logout = async () => {
     await supabase.auth.signOut();
-    setView("guest");
+    navigate({ kind: "guest-list" });
     setProfile(null);
     setUser(null);
     notify("Signed out.");
@@ -484,7 +598,12 @@ export default function App() {
       return;
     }
     setDialog(null);
-    setAdminProjectId(null);
+    if (
+      route.kind === "admin" &&
+      route.tab === "reveal" &&
+      route.projectId === editing.id
+    )
+      navigate({ kind: "admin", tab: "reveal", projectId: null }, true);
     await loadPrivate("admin");
     await loadGuest();
     notify("Project deleted.");
@@ -593,9 +712,7 @@ export default function App() {
     <header className="topbar shell">
       <Brand
         onClick={() => {
-          setMenuOpen(false);
-          setGuestProjectId(null);
-          setView("guest");
+          navigate({ kind: "guest-list" });
         }}
       />
       <button
@@ -616,9 +733,7 @@ export default function App() {
         <button
           className={"nav-link " + (view === "guest" ? "active" : "")}
           onClick={() => {
-            setMenuOpen(false);
-            setGuestProjectId(null);
-            setView("guest");
+            navigate({ kind: "guest-list" });
           }}
         >
           Public scores
@@ -628,8 +743,9 @@ export default function App() {
             <button
               className={"nav-link " + (view === profile.role ? "active" : "")}
               onClick={() => {
-                setMenuOpen(false);
-                setView(profile.role);
+                navigate(profile.role === "admin"
+                  ? { kind: "admin", tab: "projects", projectId: null }
+                  : { kind: "judge" });
               }}
             >
               {profile.role === "admin" ? "Control room" : "Judge desk"}
@@ -695,7 +811,7 @@ export default function App() {
                     judges={publicJudges}
                     scores={publishedScores}
                     totals={publishedTotals}
-                    back={() => setGuestProjectId(null)}
+                    back={() => navigate({ kind: "guest-list" })}
                   />
                 ) : (
                   <>
@@ -751,7 +867,7 @@ export default function App() {
                           <button
                             className="project-card"
                             key={project.id}
-                            onClick={() => setGuestProjectId(project.id)}
+                            onClick={() => navigate({ kind: "guest-project", projectId: project.id })}
                           >
                             <div className="card-top">
                               <span className="project-index">
@@ -833,7 +949,7 @@ export default function App() {
                     <button
                       className={authRole === "judge" ? "active" : ""}
                       onClick={() => {
-                        setAuthRole("judge");
+                        navigate({ kind: "login", role: "judge", signup });
                         setAuthError("");
                         setAuthNotice("");
                       }}
@@ -843,8 +959,7 @@ export default function App() {
                     <button
                       className={authRole === "admin" ? "active" : ""}
                       onClick={() => {
-                        setAuthRole("admin");
-                        setSignup(false);
+                        navigate({ kind: "login", role: "admin", signup: false });
                         setAuthError("");
                         setAuthNotice(
                           signup
@@ -918,7 +1033,7 @@ export default function App() {
                       <button
                         className="switch-auth"
                         onClick={() => {
-                          setSignup(!signup);
+                          navigate({ kind: "login", role: "judge", signup: !signup });
                           setAuthError("");
                           setAuthNotice("");
                         }}
@@ -972,19 +1087,19 @@ export default function App() {
                     className={
                       "tab " + (adminTab === "projects" ? "active" : "")
                     }
-                    onClick={() => setAdminTab("projects")}
+                    onClick={() => navigate({ kind: "admin", tab: "projects", projectId: null })}
                   >
                     Projects
                   </button>
                   <button
                     className={"tab " + (adminTab === "judges" ? "active" : "")}
-                    onClick={() => setAdminTab("judges")}
+                    onClick={() => navigate({ kind: "admin", tab: "judges", projectId: null })}
                   >
                     Judges
                   </button>
                   <button
                     className={"tab " + (adminTab === "reveal" ? "active" : "")}
-                    onClick={() => setAdminTab("reveal")}
+                    onClick={() => navigate({ kind: "admin", tab: "reveal", projectId: null })}
                   >
                     Reveal controls
                   </button>
@@ -1013,8 +1128,7 @@ export default function App() {
                             <button
                               className="secondary"
                               onClick={() => {
-                                setAdminProjectId(project.id);
-                                setAdminTab("reveal");
+                                navigate({ kind: "admin", tab: "reveal", projectId: project.id });
                               }}
                             >
                               <Eye size={15} /> Scores
@@ -1130,7 +1244,7 @@ export default function App() {
                               adminProject?.id === project.id ? "selected" : ""
                             }
                             key={project.id}
-                            onClick={() => setAdminProjectId(project.id)}
+                            onClick={() => navigate({ kind: "admin", tab: "reveal", projectId: project.id })}
                           >
                             {project.name}
                           </button>
